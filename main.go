@@ -13,20 +13,23 @@ import (
 	"time"
 )
 
+// input parameters
 const (
-	DaysToQuery  = 5
-	readFromFile = false
-
+	daysToQuery            = 5 // how many dates to query after initial departure and return dates
 	departureDateStr       = "2022-09-10"
 	returnDateStr          = "2022-09-20"
 	originAirportCode      = "BUE"
 	destinationAirportCode = "PUJ"
-	mockResponseFilePath   = "response.json"
+)
+
+// only used for dev
+const (
+	readFromFile         = false
+	mockResponseFilePath = "response.json"
 )
 
 func main() {
 
-	//var res *http.Response
 	c := http.Client{}
 	startingDepartureDate, err := time.Parse("2006-01-02", departureDateStr)
 	startingReturningDate, err := time.Parse("2006-01-02", returnDateStr)
@@ -36,14 +39,14 @@ func main() {
 
 	fmt.Printf("Departure starting date: %s\n", departureDateStr)
 	fmt.Printf("Return starting date: %s\n", returnDateStr)
-	fmt.Printf("From: %s", originAirportCode)
+	fmt.Printf("From: %s\n", originAirportCode)
 	fmt.Printf("To: %s\n", mockResponseFilePath)
 
-	departuresCh := make(chan Result, DaysToQuery)
-	returnsCh := make(chan Result, DaysToQuery)
+	departuresCh := make(chan Result, daysToQuery)
+	returnsCh := make(chan Result, daysToQuery)
 
 	var wg sync.WaitGroup
-	for i := 0; i < DaysToQuery; i++ {
+	for i := 0; i < daysToQuery; i++ {
 		departureDate := startingDepartureDate.AddDate(0, 0, i)
 		returnDate := startingReturningDate.AddDate(0, 0, i)
 
@@ -80,7 +83,6 @@ func main() {
 	for _, r := range returnResults {
 		printResult(r)
 	}
-
 }
 
 func sortResults(r []Result) {
