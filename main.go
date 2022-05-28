@@ -142,7 +142,7 @@ func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, star
 }
 
 func printResult(result model.Result) {
-	if result.Data.RequestedFlightSegmentList != nil {
+	if result.Data.RequestedFlightSegmentList != nil && len(result.Data.RequestedFlightSegmentList[0].FlightList) > 0 {
 		fmt.Printf("%s: %s - %s -> Best Price %d miles \n",
 			result.Data.RequestedFlightSegmentList[0].Airports.DepartureAirports[0].Code,
 			result.Data.RequestedFlightSegmentList[0].Airports.ArrivalAirports[0].Code,
@@ -185,8 +185,8 @@ func createURL(departureDate string, originAirport string, destinationAirport st
 
 func processResults(r []model.Result) {
 	// using the first flight as cheapest default
-	cheapestFlight := &r[0].Data.RequestedFlightSegmentList[0].FlightList[0]
-	cheapestFare := getSmilesClubFare(cheapestFlight)
+	var cheapestFlight *model.Flight
+	cheapestFare := 9_999_999_999
 
 	// loop through all results
 	for _, v := range r {
@@ -200,15 +200,17 @@ func processResults(r []model.Result) {
 		}
 	}
 
-	fmt.Printf("%s, %s - %s, %s, %s, %d escalas, %d millas\n",
-		cheapestFlight.Departure.Date.Format("2006-01-02"),
-		cheapestFlight.Departure.Airport.Code,
-		cheapestFlight.Arrival.Airport.Code,
-		cheapestFlight.Cabin,
-		cheapestFlight.Airline.Name,
-		cheapestFlight.Stops,
-		cheapestFare,
-	)
+	if cheapestFare != 9_999_999_999 {
+		fmt.Printf("%s, %s - %s, %s, %s, %d escalas, %d millas\n",
+			cheapestFlight.Departure.Date.Format("2006-01-02"),
+			cheapestFlight.Departure.Airport.Code,
+			cheapestFlight.Arrival.Airport.Code,
+			cheapestFlight.Cabin,
+			cheapestFlight.Airline.Name,
+			cheapestFlight.Stops,
+			cheapestFare,
+		)
+	}
 }
 
 func getSmilesClubFare(f *model.Flight) int {
