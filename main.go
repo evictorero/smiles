@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"smiles/data/model"
 	"sort"
 	"sync"
 	"time"
@@ -15,11 +16,11 @@ import (
 
 // input parameters
 const (
-	daysToQuery            = 5 // how many dates to query after initial departure and return dates
-	departureDateStr       = "2022-09-10"
-	returnDateStr          = "2022-09-20"
-	originAirportCode      = "BUE"
-	destinationAirportCode = "PUJ"
+	departureDateStr       = "2022-09-10" // primer día para la ida
+	returnDateStr          = "2022-09-20" // primer día para la vuelta
+	originAirportCode      = "BUE"        // aeropuerto de origen
+	destinationAirportCode = "PUJ"        // aeropuerto de destino
+	daysToQuery            = 1            // días corridos para buscar ida y vuelta
 )
 
 // only used for dev
@@ -40,10 +41,10 @@ func main() {
 	fmt.Printf("Departure starting date: %s\n", departureDateStr)
 	fmt.Printf("Return starting date: %s\n", returnDateStr)
 	fmt.Printf("From: %s\n", originAirportCode)
-	fmt.Printf("To: %s\n", mockResponseFilePath)
+	fmt.Printf("To: %s\n", destinationAirportCode)
 
-	departuresCh := make(chan Result, daysToQuery)
-	returnsCh := make(chan Result, daysToQuery)
+	departuresCh := make(chan model.Result, daysToQuery)
+	returnsCh := make(chan model.Result, daysToQuery)
 
 	var wg sync.WaitGroup
 	for i := 0; i < daysToQuery; i++ {
@@ -60,8 +61,8 @@ func main() {
 	close(departuresCh)
 	close(returnsCh)
 
-	var departureResults []Result
-	var returnResults []Result
+	var departureResults []model.Result
+	var returnResults []model.Result
 
 	for elem := range departuresCh {
 		departureResults = append(departureResults, elem)
@@ -85,17 +86,17 @@ func main() {
 	}
 }
 
-func sortResults(r []Result) {
+func sortResults(r []model.Result) {
 	sort.Slice(r, func(i, j int) bool {
 		return r[i].QueryDate.Before(r[j].QueryDate)
 	})
 }
 
-func makeRequest(wg *sync.WaitGroup, ch chan<- Result, c http.Client, startingDate time.Time, originAirport string, destinationAirport string) {
+func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, startingDate time.Time, originAirport string, destinationAirport string) {
 	defer wg.Done()
 	var body []byte
 	var err error
-	data := Data{}
+	data := model.Data{}
 
 	u := createURL(startingDate.Format("2006-01-02"), originAirport, destinationAirport) // Encode and assign back to the original query.
 	req := createRequest(u)
@@ -127,10 +128,10 @@ func makeRequest(wg *sync.WaitGroup, ch chan<- Result, c http.Client, startingDa
 	}
 
 	//printResult(data, startingDate)
-	ch <- Result{Data: data, QueryDate: startingDate}
+	ch <- model.Result{Data: data, QueryDate: startingDate}
 }
 
-func printResult(result Result) {
+func printResult(result model.Result) {
 	if result.Data.RequestedFlightSegmentList != nil {
 		fmt.Printf("%s: %s - %s -> Best Price %d miles \n",
 			result.Data.RequestedFlightSegmentList[0].Airports.DepartureAirports[0].Code,
