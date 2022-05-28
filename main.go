@@ -31,17 +31,19 @@ const (
 
 func main() {
 
+	start := time.Now()
 	c := http.Client{}
+
 	startingDepartureDate, err := time.Parse("2006-01-02", departureDateStr)
 	startingReturningDate, err := time.Parse("2006-01-02", returnDateStr)
 	if err != nil {
 		log.Fatal("Error parsing starting date")
 	}
 
-	fmt.Printf("Departure starting date: %s\n", departureDateStr)
-	fmt.Printf("Return starting date: %s\n", returnDateStr)
-	fmt.Printf("From: %s\n", originAirportCode)
-	fmt.Printf("To: %s\n", destinationAirportCode)
+	fmt.Printf("Primer día de búsqueda para la ida: %s\n", departureDateStr)
+	fmt.Printf("Primer día de búsqueda para la vuelta: %s\n", returnDateStr)
+	fmt.Printf("Desde: %s\n", originAirportCode)
+	fmt.Printf("Hasta: %s\n", destinationAirportCode)
 
 	departuresCh := make(chan model.Result, daysToQuery)
 	returnsCh := make(chan model.Result, daysToQuery)
@@ -61,6 +63,9 @@ func main() {
 	close(departuresCh)
 	close(returnsCh)
 
+	elapsed := time.Since(start)
+	fmt.Printf("Las consultas tomaron %s\n", elapsed)
+
 	var departureResults []model.Result
 	var returnResults []model.Result
 
@@ -75,12 +80,12 @@ func main() {
 	sortResults(departureResults)
 	sortResults(returnResults)
 
-	fmt.Println("DEPARTURES")
+	fmt.Println("IDAS")
 	for _, r := range departureResults {
 		printResult(r)
 	}
 
-	fmt.Println("RETURNS")
+	fmt.Println("VUELTAS")
 	for _, r := range returnResults {
 		printResult(r)
 	}
@@ -108,7 +113,7 @@ func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, star
 	req := createRequest(u)
 
 	//fmt.Println("Making request with URL: ", req.URL.String())
-	fmt.Printf("Making request %s - %s for day %s \n", originAirport, destinationAirport, startingDate.Format("2006-01-02"))
+	fmt.Printf("Consultando %s - %s para el día %s \n", originAirport, destinationAirport, startingDate.Format("2006-01-02"))
 
 	// only for dev purposes
 	if readFromFile {
