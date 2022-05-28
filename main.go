@@ -16,10 +16,10 @@ import (
 
 // input parameters
 const (
-	departureDateStr       = "2022-09-10" // primer día para la ida
-	returnDateStr          = "2022-09-20" // primer día para la vuelta
-	originAirportCode      = "BUE"        // aeropuerto de origen
-	destinationAirportCode = "PUJ"        // aeropuerto de destino
+	departureDateStr       = "2023-01-15" // primer día para la ida
+	returnDateStr          = "2023-01-20" // primer día para la vuelta
+	originAirportCode      = "EZE"        // aeropuerto de origen
+	destinationAirportCode = "SAO"        // aeropuerto de destino
 	daysToQuery            = 1            // días corridos para buscar ida y vuelta
 )
 
@@ -112,7 +112,7 @@ func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, star
 	u := createURL(startingDate.Format("2006-01-02"), originAirport, destinationAirport) // Encode and assign back to the original query.
 	req := createRequest(u)
 
-	//fmt.Println("Making request with URL: ", req.URL.String())
+	fmt.Println("Making request with URL: ", req.URL.String())
 	fmt.Printf("Consultando %s - %s para el día %s \n", originAirport, destinationAirport, startingDate.Format("2006-01-02"))
 
 	// only for dev purposes
@@ -172,7 +172,7 @@ func createURL(departureDate string, originAirport string, destinationAirport st
 	u := url.URL{
 		Scheme:   "https",
 		Host:     "api-air-flightsearch-prd.smiles.com.br",
-		RawQuery: "adults=1&cabinType=all&children=0&currencyCode=ARS&infants=0&isFlexibleDateChecked=false&tripType=2&forceCongener=false&r=ar",
+		RawQuery: "adults=1&cabinType=all&children=0&currencyCode=ARS&infants=0&isFlexibleDateChecked=false&tripType=2&forceCongener=true&r=ar",
 		Path:     "/v1/airlines/search",
 	}
 	q := u.Query()
@@ -185,7 +185,7 @@ func createURL(departureDate string, originAirport string, destinationAirport st
 
 func processResults(r []model.Result) {
 	// using the first flight as cheapest default
-	var cheapestFlight *model.Flight
+	var cheapestFlight model.Flight
 	cheapestFare := 9_999_999_999
 
 	// loop through all results
@@ -194,7 +194,7 @@ func processResults(r []model.Result) {
 		for _, f := range v.Data.RequestedFlightSegmentList[0].FlightList {
 			smilesClubFare := getSmilesClubFare(&f)
 			if cheapestFare > smilesClubFare {
-				cheapestFlight = &f
+				cheapestFlight = f
 				cheapestFare = smilesClubFare
 			}
 		}
