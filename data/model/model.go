@@ -1,10 +1,13 @@
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Fare struct {
-	FType     string `json:"type"`
-	BaseMiles int    `json:"baseMiles"`
+	FType string `json:"type"`
+	Miles int    `json:"miles"`
 }
 
 type Airline struct {
@@ -12,21 +15,21 @@ type Airline struct {
 	Name string `json:"name"`
 }
 
-type flightDetail struct {
-	Date    string  `json:"date"`
-	Airport Airport `json:"airport"`
+type FlightDetail struct {
+	Date    time.Time `json:"date"`
+	Airport Airport   `json:"airport"`
 }
 
 type Leg struct {
 	Cabin     string       `json:"cabin"`
-	Departure flightDetail `json:"departure"`
-	Arrival   flightDetail `json:"arrival"`
+	Departure FlightDetail `json:"departure"`
+	Arrival   FlightDetail `json:"arrival"`
 }
 type Flight struct {
 	Cabin     string       `json:"cabin"`
 	Stops     int          `json:"stops"`
-	Departure flightDetail `json:"departure"`
-	Arrival   flightDetail `json:"arrival"`
+	Departure FlightDetail `json:"departure"`
+	Arrival   FlightDetail `json:"arrival"`
 	Airline   Airline      `json:"airline"`
 	LegList   []Leg        `json:"legList"`
 	FareList  []Fare       `json:"fareList"`
@@ -63,4 +66,27 @@ type Data struct {
 type Result struct {
 	Data      Data
 	QueryDate time.Time
+}
+
+// needed because the date expected has the format "2006-01-02T15:04:05"
+func (f *FlightDetail) UnmarshalJSON(p []byte) error {
+	var aux struct {
+		Date    string  `json:"date"`
+		Airport Airport `json:"airport"`
+	}
+
+	err := json.Unmarshal(p, &aux)
+	if err != nil {
+		return err
+	}
+
+	t, err := time.Parse("2006-01-02T15:04:05", aux.Date)
+	if err != nil {
+		return err
+	}
+
+	f.Date = t
+	f.Airport = aux.Airport
+
+	return nil
 }

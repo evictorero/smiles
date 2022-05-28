@@ -26,7 +26,7 @@ const (
 // only used for dev
 const (
 	readFromFile         = false
-	mockResponseFilePath = "response.json"
+	mockResponseFilePath = "data/response.json"
 )
 
 func main() {
@@ -84,6 +84,12 @@ func main() {
 	for _, r := range returnResults {
 		printResult(r)
 	}
+
+	fmt.Println("El vuelo de ida más barato es: ")
+	processResults(departureResults)
+
+	fmt.Println("El vuelo de vuelta más barato es: ")
+	processResults(returnResults)
 }
 
 func sortResults(r []model.Result) {
@@ -127,7 +133,6 @@ func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, star
 		log.Fatal("Error unmarshalling data ", err)
 	}
 
-	//printResult(data, startingDate)
 	ch <- model.Result{Data: data, QueryDate: startingDate}
 }
 
@@ -171,4 +176,43 @@ func createURL(departureDate string, originAirport string, destinationAirport st
 	q.Add("destinationAirportCode", destinationAirport)
 	u.RawQuery = q.Encode()
 	return u
+}
+
+func processResults(r []model.Result) {
+	// using the first flight as cheapest default
+	cheapestFlight := &r[0].Data.RequestedFlightSegmentList[0].FlightList[0]
+	cheapestFare := getSmilesClubFare(cheapestFlight)
+
+	// loop through all results
+	for _, v := range r {
+		// loop through all flights by day
+		for _, f := range v.Data.RequestedFlightSegmentList[0].FlightList {
+			smilesClubFare := getSmilesClubFare(&f)
+			if cheapestFare > smilesClubFare {
+				cheapestFlight = &f
+				cheapestFare = smilesClubFare
+			}
+		}
+	}
+
+	fmt.Printf("%s, %s - %s, %s, %s, %d escalas, %d millas\n",
+		cheapestFlight.Departure.Date.Format("2006-01-02"),
+		cheapestFlight.Departure.Airport.Code,
+		cheapestFlight.Arrival.Airport.Code,
+		cheapestFlight.Cabin,
+		cheapestFlight.Airline.Name,
+		cheapestFlight.Stops,
+		cheapestFare,
+	)
+}
+
+func getSmilesClubFare(f *model.Flight) int {
+	for _, v := range f.FareList {
+		if v.FType == "SMILES_CLUB" {
+			return v.Miles
+		}
+	}
+	fmt.Println("WARN: SMILES_CLUB fare not fund")
+	// for the sake of simplicity returning ridiculous default big number when fare not found
+	return 9_999_999_999
 }
