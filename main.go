@@ -26,7 +26,7 @@ var (
 
 // only used for dev
 const (
-	readFromFile            = true
+	readFromFile            = false
 	useCommandLineArguments = false
 	mockResponseFilePath    = "data/response.json"
 )
