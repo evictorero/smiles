@@ -24,11 +24,13 @@ var (
 	daysToQuery            = 5            // días corridos para buscar ida y vuelta
 )
 
-// only used for dev
 const (
+	// only used for dev
 	readFromFile            = false
-	useCommandLineArguments = false
+	useCommandLineArguments = true
 	mockResponseFilePath    = "data/response.json"
+
+	dateLayout = "2006-01-02"
 )
 
 func main() {
@@ -45,8 +47,8 @@ func main() {
 
 	c := http.Client{}
 
-	startingDepartureDate, err := time.Parse("2006-01-02", departureDateStr)
-	startingReturningDate, err := time.Parse("2006-01-02", returnDateStr)
+	startingDepartureDate, err := time.Parse(dateLayout, departureDateStr)
+	startingReturningDate, err := time.Parse(dateLayout, returnDateStr)
 	if err != nil {
 		log.Fatal("Error parsing starting date")
 	}
@@ -121,11 +123,11 @@ func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, star
 	var err error
 	data := model.Data{}
 
-	u := createURL(startingDate.Format("2006-01-02"), originAirport, destinationAirport) // Encode and assign back to the original query.
+	u := createURL(startingDate.Format(dateLayout), originAirport, destinationAirport) // Encode and assign back to the original query.
 	req := createRequest(u)
 
 	fmt.Println("Making request with URL: ", req.URL.String())
-	fmt.Printf("Consultando %s - %s para el día %s \n", originAirport, destinationAirport, startingDate.Format("2006-01-02"))
+	fmt.Printf("Consultando %s - %s para el día %s \n", originAirport, destinationAirport, startingDate.Format(dateLayout))
 
 	// only for dev purposes
 	if readFromFile {
@@ -158,7 +160,7 @@ func printResult(result model.Result) {
 		fmt.Printf("%s: %s - %s -> Best Price %d miles \n",
 			result.Data.RequestedFlightSegmentList[0].Airports.DepartureAirports[0].Code,
 			result.Data.RequestedFlightSegmentList[0].Airports.ArrivalAirports[0].Code,
-			result.QueryDate.Format("2006-01-02"),
+			result.QueryDate.Format(dateLayout),
 			result.Data.RequestedFlightSegmentList[0].BestPricing.Miles,
 		)
 	}
@@ -214,7 +216,7 @@ func processResults(r []model.Result) {
 
 	if cheapestFare != 9_999_999_999 {
 		fmt.Printf("%s, %s - %s, %s, %s, %d escalas, %d millas\n",
-			cheapestFlight.Departure.Date.Format("2006-01-02"),
+			cheapestFlight.Departure.Date.Format(dateLayout),
 			cheapestFlight.Departure.Airport.Code,
 			cheapestFlight.Arrival.Airport.Code,
 			cheapestFlight.Cabin,
@@ -250,14 +252,14 @@ func validateParameters() {
 	}
 
 	departureDateStr = os.Args[3]
-	_, err := time.Parse("2006-01-02", departureDateStr)
+	_, err := time.Parse(dateLayout, departureDateStr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: La fecha de salida %s no es válida. %v \n", departureDateStr, err)
 		os.Exit(1)
 	}
 
 	returnDateStr = os.Args[4]
-	_, err = time.Parse("2006-01-02", returnDateStr)
+	_, err = time.Parse(dateLayout, returnDateStr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: La fecha de regreso %s no es válida. %v \n", returnDateStr, err)
 		os.Exit(1)
