@@ -13,14 +13,16 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/schollz/progressbar/v3"
 )
 
 // input parameters
 var (
-	departureDateStr       = "2023-01-15" // primer día para la ida
-	returnDateStr          = "2023-01-20" // primer día para la vuelta
+	departureDateStr       = "2022-09-10" // primer día para la ida
+	returnDateStr          = "2022-09-20" // primer día para la vuelta
 	originAirportCode      = "EZE"        // aeropuerto de origen
-	destinationAirportCode = "SAO"        // aeropuerto de destino
+	destinationAirportCode = "PUJ"        // aeropuerto de destino
 	daysToQuery            = 5            // días corridos para buscar ida y vuelta
 )
 
@@ -62,15 +64,22 @@ func main() {
 	returnsCh := make(chan model.Result, daysToQuery)
 
 	start := time.Now()
+
+	bar := progressbar.NewOptions(daysToQuery*2,
+		progressbar.OptionSetDescription("Consultando vuelos en las fechas y tramos seleccionados.."),
+		progressbar.OptionSetWidth(40),
+		progressbar.OptionSetRenderBlankState(true),
+	)
+
 	var wg sync.WaitGroup
 	for i := 0; i < daysToQuery; i++ {
 		departureDate := startingDepartureDate.AddDate(0, 0, i)
 		returnDate := startingReturningDate.AddDate(0, 0, i)
 
 		wg.Add(2)
-		go makeRequest(&wg, departuresCh, c, departureDate, originAirportCode, destinationAirportCode)
+		go makeRequest(&wg, departuresCh, c, departureDate, originAirportCode, destinationAirportCode, bar)
 		// inverting airports and changing date to query returns
-		go makeRequest(&wg, returnsCh, c, returnDate, destinationAirportCode, originAirportCode)
+		go makeRequest(&wg, returnsCh, c, returnDate, destinationAirportCode, originAirportCode, bar)
 	}
 
 	wg.Wait()
@@ -78,7 +87,7 @@ func main() {
 	close(returnsCh)
 
 	elapsed := time.Since(start)
-	fmt.Printf("Las consultas tomaron %s\n", elapsed)
+	fmt.Printf("\nLas consultas tomaron %s\n", elapsed)
 
 	var departureResults []model.Result
 	var returnResults []model.Result
@@ -94,20 +103,10 @@ func main() {
 	sortResults(departureResults)
 	sortResults(returnResults)
 
-	fmt.Println("IDAS")
-	for _, r := range departureResults {
-		printResult(r)
-	}
-
-	fmt.Println("VUELTAS")
-	for _, r := range returnResults {
-		printResult(r)
-	}
-
-	fmt.Println("El vuelo de ida más barato es: ")
+	fmt.Println("VUELOS DE IDA")
 	processResults(departureResults)
 
-	fmt.Println("El vuelo de vuelta más barato es: ")
+	fmt.Println("VUELOS DE VUELTA")
 	processResults(returnResults)
 }
 
@@ -117,8 +116,10 @@ func sortResults(r []model.Result) {
 	})
 }
 
-func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, startingDate time.Time, originAirport string, destinationAirport string) {
+func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, startingDate time.Time, originAirport string, destinationAirport string, bar *progressbar.ProgressBar) {
 	defer wg.Done()
+	defer bar.Add(1)
+
 	var body []byte
 	var err error
 	data := model.Data{}
@@ -127,7 +128,7 @@ func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, star
 	req := createRequest(u)
 
 	//fmt.Println("Making request with URL: ", req.URL.String())
-	fmt.Printf("Consultando %s - %s para el día %s \n", originAirport, destinationAirport, startingDate.Format(dateLayout))
+	//fmt.Printf("Consultando %s - %s para el día %s \n", originAirport, destinationAirport, startingDate.Format(dateLayout))
 
 	// only for dev purposes
 	if readFromFile {
@@ -153,17 +154,6 @@ func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, star
 	}
 
 	ch <- model.Result{Data: data, QueryDate: startingDate}
-}
-
-func printResult(result model.Result) {
-	if result.Data.RequestedFlightSegmentList != nil && len(result.Data.RequestedFlightSegmentList[0].FlightList) > 0 {
-		fmt.Printf("%s: %s - %s -> Best Price %d miles \n",
-			result.Data.RequestedFlightSegmentList[0].Airports.DepartureAirports[0].Code,
-			result.Data.RequestedFlightSegmentList[0].Airports.ArrivalAirports[0].Code,
-			result.QueryDate.Format(dateLayout),
-			result.Data.RequestedFlightSegmentList[0].BestPricing.Miles,
-		)
-	}
 }
 
 func createRequest(u url.URL) *http.Request {
@@ -195,36 +185,6 @@ func createURL(departureDate string, originAirport string, destinationAirport st
 	q.Add("destinationAirportCode", destinationAirport)
 	u.RawQuery = q.Encode()
 	return u
-}
-
-func processResults(r []model.Result) {
-	// using the first flight as cheapest default
-	var cheapestFlight model.Flight
-	cheapestFare := 9_999_999
-
-	// loop through all results
-	for _, v := range r {
-		// loop through all flights by day
-		for _, f := range v.Data.RequestedFlightSegmentList[0].FlightList {
-			smilesClubFare := getSmilesClubFare(&f)
-			if cheapestFare > smilesClubFare {
-				cheapestFlight = f
-				cheapestFare = smilesClubFare
-			}
-		}
-	}
-
-	if cheapestFare != 9_999_999 {
-		fmt.Printf("%s, %s - %s, %s, %s, %d escalas, %d millas\n",
-			cheapestFlight.Departure.Date.Format(dateLayout),
-			cheapestFlight.Departure.Airport.Code,
-			cheapestFlight.Arrival.Airport.Code,
-			cheapestFlight.Cabin,
-			cheapestFlight.Airline.Name,
-			cheapestFlight.Stops,
-			cheapestFare,
-		)
-	}
 }
 
 func getSmilesClubFare(f *model.Flight) int {
@@ -276,4 +236,55 @@ func validateParameters() {
 		os.Exit(1)
 	}
 	daysToQuery = int(v)
+}
+
+func processResults(r []model.Result) {
+	// using the first flight as cheapest default
+	var cheapestFlight model.Flight
+	cheapestFare := 9_999_999
+
+	// loop through all results
+	for _, v := range r {
+		var cheapestFlightDay model.Flight
+		cheapestFareDay := 9_999_999
+		// loop through all flights by day
+		for _, f := range v.Data.RequestedFlightSegmentList[0].FlightList {
+			smilesClubFare := getSmilesClubFare(&f)
+			if cheapestFareDay > smilesClubFare {
+				cheapestFlightDay = f
+				cheapestFareDay = smilesClubFare
+			}
+		}
+
+		if cheapestFare > cheapestFareDay {
+			cheapestFlight = cheapestFlightDay
+			cheapestFare = cheapestFareDay
+		}
+
+		if cheapestFareDay != 9_999_999 {
+			fmt.Printf("Vuelo más barato del día %s:, %s - %s, %s, %s, %d escalas, %d millas\n",
+				cheapestFlightDay.Departure.Date.Format(dateLayout),
+				cheapestFlightDay.Departure.Airport.Code,
+				cheapestFlightDay.Arrival.Airport.Code,
+				cheapestFlightDay.Cabin,
+				cheapestFlightDay.Airline.Name,
+				cheapestFlightDay.Stops,
+				cheapestFareDay,
+			)
+		}
+	}
+
+	fmt.Println()
+	if cheapestFare != 9_999_999 {
+		fmt.Printf("Vuelo más barato en estas fechas: %s, %s - %s, %s, %s, %d escalas, %d millas\n",
+			cheapestFlight.Departure.Date.Format(dateLayout),
+			cheapestFlight.Departure.Airport.Code,
+			cheapestFlight.Arrival.Airport.Code,
+			cheapestFlight.Cabin,
+			cheapestFlight.Airline.Name,
+			cheapestFlight.Stops,
+			cheapestFare,
+		)
+	}
+	fmt.Println()
 }
