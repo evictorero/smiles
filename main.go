@@ -126,7 +126,7 @@ func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, star
 	u := createURL(startingDate.Format(dateLayout), originAirport, destinationAirport) // Encode and assign back to the original query.
 	req := createRequest(u)
 
-	fmt.Println("Making request with URL: ", req.URL.String())
+	//fmt.Println("Making request with URL: ", req.URL.String())
 	fmt.Printf("Consultando %s - %s para el día %s \n", originAirport, destinationAirport, startingDate.Format(dateLayout))
 
 	// only for dev purposes
@@ -200,7 +200,7 @@ func createURL(departureDate string, originAirport string, destinationAirport st
 func processResults(r []model.Result) {
 	// using the first flight as cheapest default
 	var cheapestFlight model.Flight
-	cheapestFare := 9_999_999_999
+	cheapestFare := 9_999_999
 
 	// loop through all results
 	for _, v := range r {
@@ -214,7 +214,7 @@ func processResults(r []model.Result) {
 		}
 	}
 
-	if cheapestFare != 9_999_999_999 {
+	if cheapestFare != 9_999_999 {
 		fmt.Printf("%s, %s - %s, %s, %s, %d escalas, %d millas\n",
 			cheapestFlight.Departure.Date.Format(dateLayout),
 			cheapestFlight.Departure.Airport.Code,
@@ -235,7 +235,7 @@ func getSmilesClubFare(f *model.Flight) int {
 	}
 	fmt.Println("WARN: SMILES_CLUB fare not fund")
 	// for the sake of simplicity returning ridiculous default big number when fare not found
-	return 9_999_999_999
+	return 9_999_999
 }
 
 func validateParameters() {
