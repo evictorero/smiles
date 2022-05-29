@@ -40,7 +40,7 @@ func main() {
 	if useCommandLineArguments {
 		if len(os.Args) != 6 {
 			fmt.Println("Forma de Uso: Origen Destino Fecha Ida Fecha Vuelta Cantidad de días a consultar")
-			fmt.Println("Ejemplo: go run main.go BUE PUJ 2023-01-10 2023-01-20 5")
+			fmt.Println("Ejemplo: smiles BUE PUJ 2023-01-10 2023-01-20 5")
 			os.Exit(1)
 		}
 
@@ -63,15 +63,15 @@ func main() {
 	departuresCh := make(chan model.Result, daysToQuery)
 	returnsCh := make(chan model.Result, daysToQuery)
 
-	start := time.Now()
-
 	bar := progressbar.NewOptions(daysToQuery*2,
 		progressbar.OptionSetDescription("Consultando vuelos en las fechas y tramos seleccionados.."),
 		progressbar.OptionSetWidth(40),
 		progressbar.OptionSetRenderBlankState(true),
 	)
 
+	start := time.Now()
 	var wg sync.WaitGroup
+
 	for i := 0; i < daysToQuery; i++ {
 		departureDate := startingDepartureDate.AddDate(0, 0, i)
 		returnDate := startingReturningDate.AddDate(0, 0, i)
@@ -86,7 +86,7 @@ func main() {
 	close(departuresCh)
 	close(returnsCh)
 
-	elapsed := time.Since(start)
+	elapsed := time.Since(start).Round(time.Second).String()
 	fmt.Printf("\nLas consultas tomaron %s\n", elapsed)
 
 	var departureResults []model.Result
