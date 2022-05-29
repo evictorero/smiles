@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"smiles/data/model"
+	"smiles/model"
 	"sort"
 	"strconv"
 	"sync"
@@ -262,7 +262,7 @@ func processResults(r []model.Result) {
 		}
 
 		if cheapestFareDay != 9_999_999 {
-			fmt.Printf("Vuelo más barato del día %s:, %s - %s, %s, %s, %d escalas, %d millas\n",
+			fmt.Printf("Vuelo más barato del día %s: %s - %s, %s, %s, %d escalas, %d millas\n",
 				cheapestFlightDay.Departure.Date.Format(dateLayout),
 				cheapestFlightDay.Departure.Airport.Code,
 				cheapestFlightDay.Arrival.Airport.Code,
