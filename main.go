@@ -10,28 +10,39 @@ import (
 	"os"
 	"smiles/data/model"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 )
 
 // input parameters
-const (
+var (
 	departureDateStr       = "2023-01-15" // primer día para la ida
 	returnDateStr          = "2023-01-20" // primer día para la vuelta
 	originAirportCode      = "EZE"        // aeropuerto de origen
 	destinationAirportCode = "SAO"        // aeropuerto de destino
-	daysToQuery            = 1            // días corridos para buscar ida y vuelta
+	daysToQuery            = 5            // días corridos para buscar ida y vuelta
 )
 
 // only used for dev
 const (
-	readFromFile         = false
-	mockResponseFilePath = "data/response.json"
+	readFromFile            = true
+	useCommandLineArguments = false
+	mockResponseFilePath    = "data/response.json"
 )
 
 func main() {
 
-	start := time.Now()
+	if useCommandLineArguments {
+		if len(os.Args) != 6 {
+			fmt.Println("Forma de Uso: Origen Destino Fecha Ida Fecha Vuelta Cantidad de días a consultar")
+			fmt.Println("Ejemplo: go run main.go BUE PUJ 2023-01-10 2023-01-20 5")
+			os.Exit(1)
+		}
+
+		validateParameters()
+	}
+
 	c := http.Client{}
 
 	startingDepartureDate, err := time.Parse("2006-01-02", departureDateStr)
@@ -48,6 +59,7 @@ func main() {
 	departuresCh := make(chan model.Result, daysToQuery)
 	returnsCh := make(chan model.Result, daysToQuery)
 
+	start := time.Now()
 	var wg sync.WaitGroup
 	for i := 0; i < daysToQuery; i++ {
 		departureDate := startingDepartureDate.AddDate(0, 0, i)
@@ -222,4 +234,44 @@ func getSmilesClubFare(f *model.Flight) int {
 	fmt.Println("WARN: SMILES_CLUB fare not fund")
 	// for the sake of simplicity returning ridiculous default big number when fare not found
 	return 9_999_999_999
+}
+
+func validateParameters() {
+	originAirportCode = os.Args[1]
+	if len(originAirportCode) != 3 {
+		fmt.Fprintf(os.Stderr, "Error: El aeropuerto de origen %s no es válido\n", originAirportCode)
+		os.Exit(1)
+	}
+
+	destinationAirportCode = os.Args[2]
+	if len(destinationAirportCode) != 3 {
+		fmt.Fprintf(os.Stderr, "Error: El aeropuerto de destino %s no es válido\n", destinationAirportCode)
+		os.Exit(1)
+	}
+
+	departureDateStr = os.Args[3]
+	_, err := time.Parse("2006-01-02", departureDateStr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: La fecha de salida %s no es válida. %v \n", departureDateStr, err)
+		os.Exit(1)
+	}
+
+	returnDateStr = os.Args[4]
+	_, err = time.Parse("2006-01-02", returnDateStr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: La fecha de regreso %s no es válida. %v \n", returnDateStr, err)
+		os.Exit(1)
+	}
+
+	v, err := strconv.ParseInt(os.Args[5], 10, 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: La cantidad de días %d no es válida. %v \n", v, err)
+		os.Exit(1)
+	}
+
+	if v >= 10 {
+		fmt.Fprintf(os.Stderr, "Error: La cantidad de días no puede ser mayor a 10 \n")
+		os.Exit(1)
+	}
+	daysToQuery = int(v)
 }
