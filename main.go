@@ -23,7 +23,7 @@ var (
 	returnDateStr          = "2022-09-20" // primer día para la vuelta
 	originAirportCode      = "EZE"        // aeropuerto de origen
 	destinationAirportCode = "PUJ"        // aeropuerto de destino
-	daysToQuery            = 5            // días corridos para buscar ida y vuelta
+	daysToQuery            = 1            // días corridos para buscar ida y vuelta
 )
 
 const (
@@ -32,7 +32,8 @@ const (
 	useCommandLineArguments = true
 	mockResponseFilePath    = "data/response.json"
 
-	dateLayout = "2006-01-02"
+	dateLayout        = "2006-01-02"
+	bigMaxMilesNumber = 9_999_999
 )
 
 func main() {
@@ -77,9 +78,9 @@ func main() {
 		returnDate := startingReturningDate.AddDate(0, 0, i)
 
 		wg.Add(2)
-		go makeRequest(&wg, departuresCh, c, departureDate, originAirportCode, destinationAirportCode, bar)
+		go makeRequest(&wg, departuresCh, &c, departureDate, originAirportCode, destinationAirportCode, bar)
 		// inverting airports and changing date to query returns
-		go makeRequest(&wg, returnsCh, c, returnDate, destinationAirportCode, originAirportCode, bar)
+		go makeRequest(&wg, returnsCh, &c, returnDate, destinationAirportCode, originAirportCode, bar)
 	}
 
 	wg.Wait()
@@ -104,10 +105,10 @@ func main() {
 	sortResults(returnResults)
 
 	fmt.Println("VUELOS DE IDA")
-	processResults(departureResults)
+	processResults(&c, departureResults)
 
 	fmt.Println("VUELOS DE VUELTA")
-	processResults(returnResults)
+	processResults(&c, returnResults)
 }
 
 func sortResults(r []model.Result) {
@@ -116,7 +117,7 @@ func sortResults(r []model.Result) {
 	})
 }
 
-func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, startingDate time.Time, originAirport string, destinationAirport string, bar *progressbar.ProgressBar) {
+func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c *http.Client, startingDate time.Time, originAirport string, destinationAirport string, bar *progressbar.ProgressBar) {
 	defer wg.Done()
 	defer bar.Add(1)
 
@@ -125,7 +126,7 @@ func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, star
 	data := model.Data{}
 
 	u := createURL(startingDate.Format(dateLayout), originAirport, destinationAirport) // Encode and assign back to the original query.
-	req := createRequest(u)
+	req := createRequest(u, "api-air-flightsearch-prd.smiles.com.br")
 
 	//fmt.Println("Making request with URL: ", req.URL.String())
 	//fmt.Printf("Consultando %s - %s para el día %s \n", originAirport, destinationAirport, startingDate.Format(dateLayout))
@@ -156,7 +157,7 @@ func makeRequest(wg *sync.WaitGroup, ch chan<- model.Result, c http.Client, star
 	ch <- model.Result{Data: data, QueryDate: startingDate}
 }
 
-func createRequest(u url.URL) *http.Request {
+func createRequest(u url.URL, authority string) *http.Request {
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		log.Fatal("Error creating request ", err)
@@ -168,7 +169,7 @@ func createRequest(u url.URL) *http.Request {
 	req.Header.Add("origin", "https://www.smiles.com.ar")
 	req.Header.Add("referer", "https://www.smiles.com.ar")
 	req.Header.Add("channel", "web")
-	req.Header.Add("authority", "api-air-flightsearch-prd.smiles.com.br")
+	req.Header.Add("authority", authority)
 	return req
 }
 
@@ -187,15 +188,30 @@ func createURL(departureDate string, originAirport string, destinationAirport st
 	return u
 }
 
-func getSmilesClubFare(f *model.Flight) int {
-	for _, v := range f.FareList {
+func createTaxURL(departureFlight *model.Flight, departureFare *model.Fare) url.URL {
+	u := url.URL{
+		Scheme:   "https",
+		Host:     "api-airlines-boarding-tax-prd.smiles.com.br",
+		RawQuery: "adults=1&children=0&infants=0&highlightText=SMILES_CLUB",
+		Path:     "/v1/airlines/flight/boardingtax",
+	}
+	q := u.Query()
+	q.Add("type", "SEGMENT_1")
+	q.Add("uid", departureFlight.UId)
+	q.Add("fareuid", departureFare.UId)
+	u.RawQuery = q.Encode()
+	return u
+}
+
+func getSmilesClubFare(f *model.Flight) *model.Fare {
+	for i, v := range f.FareList {
 		if v.FType == "SMILES_CLUB" {
-			return v.Miles
+			return &f.FareList[i]
 		}
 	}
 	fmt.Println("WARN: SMILES_CLUB fare not fund")
 	// for the sake of simplicity returning ridiculous default big number when fare not found
-	return 9_999_999
+	return &model.Fare{Miles: bigMaxMilesNumber}
 }
 
 func validateParameters() {
@@ -231,37 +247,42 @@ func validateParameters() {
 		os.Exit(1)
 	}
 
-	if v >= 10 {
+	if v > 10 {
 		fmt.Fprintf(os.Stderr, "Error: La cantidad de días no puede ser mayor a 10 \n")
 		os.Exit(1)
 	}
 	daysToQuery = int(v)
 }
 
-func processResults(r []model.Result) {
+func processResults(c *http.Client, r []model.Result) {
 	// using the first flight as cheapest default
-	var cheapestFlight model.Flight
-	cheapestFare := 9_999_999
+	var cheapestFlight *model.Flight
+	cheapestFare := &model.Fare{
+		Miles: bigMaxMilesNumber,
+	}
 
 	// loop through all results
 	for _, v := range r {
-		var cheapestFlightDay model.Flight
-		cheapestFareDay := 9_999_999
+		var cheapestFlightDay *model.Flight
+		cheapestFareDay := &model.Fare{
+			Miles: bigMaxMilesNumber,
+		}
+
 		// loop through all flights by day
 		for _, f := range v.Data.RequestedFlightSegmentList[0].FlightList {
 			smilesClubFare := getSmilesClubFare(&f)
-			if cheapestFareDay > smilesClubFare {
-				cheapestFlightDay = f
+			if cheapestFareDay.Miles > smilesClubFare.Miles {
+				cheapestFlightDay = &f
 				cheapestFareDay = smilesClubFare
 			}
 		}
 
-		if cheapestFare > cheapestFareDay {
+		if cheapestFare.Miles > cheapestFareDay.Miles {
 			cheapestFlight = cheapestFlightDay
 			cheapestFare = cheapestFareDay
 		}
 
-		if cheapestFareDay != 9_999_999 {
+		if cheapestFareDay.Miles != bigMaxMilesNumber {
 			fmt.Printf("Vuelo más barato del día %s: %s - %s, %s, %s, %d escalas, %d millas\n",
 				cheapestFlightDay.Departure.Date.Format(dateLayout),
 				cheapestFlightDay.Departure.Airport.Code,
@@ -269,22 +290,49 @@ func processResults(r []model.Result) {
 				cheapestFlightDay.Cabin,
 				cheapestFlightDay.Airline.Name,
 				cheapestFlightDay.Stops,
-				cheapestFareDay,
+				cheapestFareDay.Miles,
 			)
 		}
 	}
 
 	fmt.Println()
-	if cheapestFare != 9_999_999 {
-		fmt.Printf("Vuelo más barato en estas fechas: %s, %s - %s, %s, %s, %d escalas, %d millas\n",
+	if cheapestFare.Miles != bigMaxMilesNumber {
+		boardingTax := getTaxForFlight(c, cheapestFlight, cheapestFare)
+
+		fmt.Printf("Vuelo más barato en estas fechas: %s, %s - %s, %s, %s, %d escalas, %d millas, %f de Tasas e impuestos\n",
 			cheapestFlight.Departure.Date.Format(dateLayout),
 			cheapestFlight.Departure.Airport.Code,
 			cheapestFlight.Arrival.Airport.Code,
 			cheapestFlight.Cabin,
 			cheapestFlight.Airline.Name,
 			cheapestFlight.Stops,
-			cheapestFare,
+			cheapestFare.Miles,
+			boardingTax.Totals.Total.Money,
 		)
+
 	}
 	fmt.Println()
+}
+
+func getTaxForFlight(c *http.Client, flight *model.Flight, fare *model.Fare) *model.BoardingTax {
+	u := createTaxURL(flight, fare)
+	r := createRequest(u, "api-airlines-boarding-tax-prd.smiles.com.br")
+	var body []byte
+	var data model.BoardingTax
+
+	res, err := c.Do(r)
+	if err != nil {
+		log.Fatal("Error making request ", err)
+	}
+
+	body, err = ioutil.ReadAll(res.Body)
+	if body == nil {
+		log.Fatal("Empty result")
+	}
+
+	if err := json.Unmarshal(body, &data); err != nil {
+		log.Fatal("Error unmarshalling data ", err)
+	}
+
+	return &data
 }

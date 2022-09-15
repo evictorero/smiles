@@ -6,6 +6,7 @@ import (
 )
 
 type Fare struct {
+	UId   string `json:"uid"`
 	FType string `json:"type"`
 	Miles int    `json:"miles"`
 }
@@ -26,6 +27,7 @@ type Leg struct {
 	Arrival   FlightDetail `json:"arrival"`
 }
 type Flight struct {
+	UId       string       `json:"uid"`
 	Cabin     string       `json:"cabin"`
 	Stops     int          `json:"stops"`
 	Departure FlightDetail `json:"departure"`
@@ -66,6 +68,19 @@ type Data struct {
 type Result struct {
 	Data      Data
 	QueryDate time.Time
+}
+type Totals struct {
+	Total     Total `json:"total"`
+	TotalFare Total `json:"totalFare"`
+}
+
+type Total struct {
+	Miles int     `json:"miles"`
+	Money float32 `json:"money"`
+}
+
+type BoardingTax struct {
+	Totals Totals `json:"totals"`
 }
 
 // needed because the date expected has the format "2006-01-02T15:04:05"
